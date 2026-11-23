@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { BLOCKLIST_URL, diffHandles, normalizeHandle, parseUsernames, syncBlocklist } from '@/utils/blocklist';
+import {
+  BLOCKLIST_URL,
+  diffHandles,
+  MAX_LIST_BYTES,
+  MAX_LIST_HANDLES,
+  normalizeHandle,
+  parseUsernames,
+  syncBlocklist,
+} from '@/utils/blocklist';
 import { blocklistHandlesItem, blocklistMetaItem, type BlocklistMeta } from '@/utils/storage';
 
 function textResponse(body: string, status = 200, etag?: string): Response {
@@ -179,6 +187,17 @@ describe('syncBlocklist', () => {
         'an HTML-ish 200 body',
         () => textResponse('<!doctype html>\n<html><body>Error</body></html>', 200, '"v2"'),
         'Empty or invalid list',
+      ],
+      [
+        'a Content-Length over the size cap',
+        () => new Response('bob', { headers: { 'content-length': String(MAX_LIST_BYTES + 1) } }),
+        'List too large',
+      ],
+      ['a body over the size cap', () => textResponse('bob\n'.repeat(MAX_LIST_BYTES / 4 + 1)), 'List too large'],
+      [
+        'more handles than the cap',
+        () => textResponse(Array.from({ length: MAX_LIST_HANDLES + 1 }, (_, i) => `h${i}`).join('\n')),
+        'Too many handles',
       ],
       ['a 503', () => textResponse('Service Unavailable', 503), 'HTTP 503'],
       ['a network error', () => new TypeError('Failed to fetch'), 'Failed to fetch'],

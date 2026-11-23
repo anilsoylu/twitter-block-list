@@ -1,6 +1,8 @@
 import { blocklistHandlesItem, blocklistMetaItem, type BlocklistMeta } from './storage';
 
 export const BLOCKLIST_URL = 'https://blockedforaireply.com/api/usernames.txt';
+export const MAX_LIST_BYTES = 2_000_000;
+export const MAX_LIST_HANDLES = 100_000;
 
 export interface RefreshBlocklistMessage {
   type: 'refresh-blocklist';
@@ -53,8 +55,12 @@ export async function syncBlocklist(fetchFn: typeof fetch = fetch): Promise<Bloc
     if (response.status === 304) {
       next = { ...meta, lastSyncedAt: Date.now(), lastError: null };
     } else if (response.status === 200) {
-      const fetched = parseUsernames(await response.text());
+      if (Number(response.headers.get('content-length')) > MAX_LIST_BYTES) throw new Error('List too large');
+      const text = await response.text();
+      if (text.length > MAX_LIST_BYTES) throw new Error('List too large');
+      const fetched = parseUsernames(text);
       if (fetched.length === 0) throw new Error('Empty or invalid list');
+      if (fetched.length > MAX_LIST_HANDLES) throw new Error('Too many handles');
       const now = Date.now();
       const { added, removed } = diffHandles(handles, fetched);
       const changed = added + removed > 0;
