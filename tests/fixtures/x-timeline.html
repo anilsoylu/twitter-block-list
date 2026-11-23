@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <title>Home / X</title>
+    <script>
+      // Keys that reach X's own document-level shortcut handlers.
+      window.__keys = [];
+      document.addEventListener('keydown', (event) => window.__keys.push(event.key));
+    </script>
   </head>
   <body>
     <main role="main">
@@ -16,7 +21,17 @@
                 <a href="/alice/status/111" role="link"><time datetime="2026-11-20T10:00:00.000Z">Nov 20</time></a></div>
             </div>
             <div data-testid="tweetText" lang="en"><span>alice says hello</span></div>
-            <div role="group" id="id__alice"></div>
+            <div role="link" tabindex="0">
+              <div data-testid="User-Name"><div><span>Carol</span></div><div><span tabindex="-1">@carol</span></div></div>
+              <div data-testid="tweetText"><span>carol text</span></div>
+              <div role="group" id="id__alice_card"><button data-testid="like" type="button" aria-label="Like card">C</button></div>
+            </div>
+            <div role="group" id="id__alice">
+              <button data-testid="reply" type="button" aria-label="Reply">R</button>
+              <button data-testid="retweet" type="button" aria-label="Repost">T</button>
+              <button data-testid="like" type="button" aria-label="Like">L</button>
+              <button data-testid="bookmark" type="button" aria-label="Bookmark">B</button>
+            </div>
           </article>
         </div></div></div>
 
@@ -49,6 +64,44 @@
             <div role="group" id="id__bob_quote"></div>
           </article>
         </div></div></div>
+
+        <div data-testid="cellInnerDiv"><div>
+          <div style="display: flex; flex-direction: row" data-testid="discover-row">
+            <article data-testid="tweet" role="article" tabindex="0">
+              <div data-testid="User-Name">
+                <div><a href="/alice" role="link"><span>Alice</span></a></div>
+                <div><a href="/alice" role="link" tabindex="-1"><span>@alice</span></a><span>·</span>
+                  <a href="/alice/status/555" role="link"><time datetime="2026-11-20T10:00:00.000Z">Nov 20</time></a></div>
+              </div>
+              <div data-testid="tweetText" lang="en"><span>discover more from alice</span></div>
+            </article>
+          </div>
+        </div></div>
+
+        <div data-testid="cellInnerDiv"><div>
+          <div data-testid="UserCell" role="button" tabindex="0">
+            <a href="/alice" role="link"><span>Alice</span></a><a href="/alice" role="link" tabindex="-1"><span>@alice</span></a>
+          </div>
+        </div></div>
+
+        <div data-testid="cellInnerDiv"><div>
+          <div data-testid="UserCell" role="button" tabindex="0">
+            <a href="/bob" role="link"><span>Bob</span></a><a href="/bob" role="link" tabindex="-1"><span>@bob</span></a>
+          </div>
+        </div></div>
+
+        <div data-testid="cellInnerDiv"><div>
+          <article data-testid="notification" role="article" tabindex="0" aria-label="listed likes">
+            <a href="/alice" role="link"><span>Alice</span></a> and <a href="/quoted" role="link"><span>Quoted</span></a> liked your post
+            <div data-testid="tweetText"><a href="/bob" role="link">@bob</a></div>
+          </article>
+        </div></div>
+
+        <div data-testid="cellInnerDiv"><div>
+          <article data-testid="notification" role="article" tabindex="0" aria-label="mixed likes">
+            <a href="/alice" role="link"><span>Alice</span></a> and <a href="/bob" role="link"><span>Bob</span></a> liked your post
+          </article>
+        </div></div>
       </div>
     </main>
   </body>
