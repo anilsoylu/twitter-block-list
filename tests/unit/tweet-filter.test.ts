@@ -478,6 +478,12 @@ describe('shouldBlockShortcut', () => {
     expect(shouldBlockShortcut(key('l'), document.body)).toBe(false);
     expect(shouldBlockShortcut(key('l'), null)).toBe(false);
   });
+
+  it('ignores synthetic keydowns without a key', () => {
+    const inner = setUp('locked');
+    const event = { ...key('l', inner), key: undefined as unknown as string };
+    expect(shouldBlockShortcut(event, inner)).toBe(false);
+  });
 });
 
 describe('applyUserCellFilter', () => {

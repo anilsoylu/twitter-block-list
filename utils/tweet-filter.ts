@@ -289,6 +289,8 @@ export function shouldBlockShortcut(
   activeElement: Element | null,
 ): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  // Synthetic keydowns (e.g. Chrome autofill) can arrive without a key.
+  if (typeof event.key !== 'string') return false;
   if (!BLOCKED_SHORTCUTS.has(event.key.toLowerCase())) return false;
   if (event.target instanceof Element && event.target.closest(EDITABLE_SELECTOR)) return false;
   const article = activeElement ? getOutermostTweet(activeElement) : null;
