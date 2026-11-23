@@ -11,8 +11,12 @@ function isRefreshMessage(message: unknown): message is RefreshBlocklistMessage 
 export default defineBackground(() => {
   // Listeners must be registered synchronously so a restarted worker receives the event that woke it.
   browser.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'update') await migrateLegacyStorage();
-    await syncBlocklist();
+    // A failed migration must not skip the sync.
+    try {
+      if (details.reason === 'update') await migrateLegacyStorage();
+    } finally {
+      await syncBlocklist();
+    }
   });
 
   browser.runtime.onStartup.addListener(() => {
