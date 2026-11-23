@@ -1,9 +1,10 @@
 import type { RefreshBlocklistMessage } from '@/utils/blocklist';
 import {
   allowlistItem,
-  blocklistItem,
+  blocklistHandlesItem,
+  blocklistMetaItem,
   settingsItem,
-  type BlocklistState,
+  type BlocklistMeta,
   type FilterMode,
   type Settings,
 } from '@/utils/storage';
@@ -15,8 +16,10 @@ function byId<T extends HTMLElement>(id: string): T {
 const enabledInput = byId<HTMLInputElement>('enabled');
 const modeFieldset = byId<HTMLFieldSetElement>('mode');
 const modeInputs = Array.from(modeFieldset.querySelectorAll<HTMLInputElement>('input[name="mode"]'));
-const countText = byId<HTMLParagraphElement>('count');
-const updatedText = byId<HTMLParagraphElement>('updated');
+const countText = byId<HTMLSpanElement>('count');
+const countLabel = byId<HTMLSpanElement>('count-label');
+const updatedText = byId<HTMLSpanElement>('updated');
+const changeText = byId<HTMLSpanElement>('change');
 const errorText = byId<HTMLParagraphElement>('error');
 const refreshButton = byId<HTMLButtonElement>('refresh');
 const allowlistList = byId<HTMLUListElement>('allowlist');
@@ -28,14 +31,35 @@ function renderSettings(settings: Settings): void {
   for (const input of modeInputs) input.checked = input.value === settings.mode;
 }
 
-function renderBlocklist(state: BlocklistState): void {
-  const count = state.handles.length;
-  countText.textContent = `${count.toLocaleString()} ${count === 1 ? 'account' : 'accounts'} on the list`;
-  updatedText.textContent = state.lastSyncedAt
-    ? `Last updated ${new Date(state.lastSyncedAt).toLocaleString()}`
-    : 'Last updated never';
-  errorText.hidden = !state.lastError;
-  errorText.textContent = state.lastError ? `Last update failed: ${state.lastError}` : '';
+function renderCount(handles: string[]): void {
+  const count = handles.length;
+  countText.textContent = count.toLocaleString();
+  countLabel.textContent = count === 1 ? 'account filtered' : 'accounts filtered';
+}
+
+function renderError(message: string | null): void {
+  errorText.hidden = !message;
+  errorText.textContent = message ? `Last update failed: ${message}` : '';
+}
+
+/** Time only for today, otherwise a short date; the full timestamp goes in the tooltip. */
+function formatWhen(at: number): string {
+  const date = new Date(at);
+  return date.toDateString() === new Date().toDateString()
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function renderMeta(meta: BlocklistMeta): void {
+  updatedText.textContent = meta.lastSyncedAt ? `Updated ${formatWhen(meta.lastSyncedAt)}` : 'Not updated yet';
+  updatedText.title = meta.lastSyncedAt ? new Date(meta.lastSyncedAt).toLocaleString() : '';
+  const change = meta.lastChange;
+  changeText.hidden = !change;
+  changeText.textContent = change
+    ? `Last change +${change.added.toLocaleString()} / \u2212${change.removed.toLocaleString()}`
+    : '';
+  changeText.title = change ? new Date(change.at).toLocaleString() : '';
+  renderError(meta.lastError);
 }
 
 function renderAllowlist(handles: string[]): void {
@@ -45,7 +69,8 @@ function renderAllowlist(handles: string[]): void {
     name.textContent = `@${handle}`;
     const remove = document.createElement('button');
     remove.type = 'button';
-    remove.textContent = 'Remove';
+    remove.className = 'icon-button remove-button';
+    remove.textContent = '\u00d7';
     remove.setAttribute('aria-label', `Remove @${handle}`);
     remove.addEventListener('click', () => void removeFromAllowlist(handle));
     item.append(name, remove);
@@ -74,10 +99,12 @@ for (const input of modeInputs) {
 refreshButton.addEventListener('click', async () => {
   refreshButton.disabled = true;
   try {
-    const state: BlocklistState = await browser.runtime.sendMessage({
+    const meta: BlocklistMeta = await browser.runtime.sendMessage({
       type: 'refresh-blocklist',
     } satisfies RefreshBlocklistMessage);
-    renderBlocklist(state);
+    renderMeta(meta);
+  } catch (error) {
+    renderError(error instanceof Error ? error.message : String(error));
   } finally {
     refreshButton.disabled = false;
   }
@@ -85,12 +112,17 @@ refreshButton.addEventListener('click', async () => {
 
 settingsItem.watch(renderSettings);
 allowlistItem.watch(renderAllowlist);
-blocklistItem.watch(renderBlocklist);
+blocklistHandlesItem.watch(renderCount);
+blocklistMetaItem.watch(renderMeta);
 
-void Promise.all([settingsItem.getValue(), allowlistItem.getValue(), blocklistItem.getValue()]).then(
-  ([settings, allowlist, blocklist]) => {
-    renderSettings(settings);
-    renderAllowlist(allowlist);
-    renderBlocklist(blocklist);
-  },
-);
+void Promise.all([
+  settingsItem.getValue(),
+  allowlistItem.getValue(),
+  blocklistHandlesItem.getValue(),
+  blocklistMetaItem.getValue(),
+]).then(([settings, allowlist, handles, meta]) => {
+  renderSettings(settings);
+  renderAllowlist(allowlist);
+  renderCount(handles);
+  renderMeta(meta);
+});
