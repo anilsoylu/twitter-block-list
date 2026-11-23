@@ -5,11 +5,19 @@ import { allowlistItem } from './storage';
 const LEGACY_ALLOWLIST_KEY = 'sync:allowlist';
 const LEGACY_BLOCKLIST_KEY = 'local:blocklist';
 
+/** Per-device flag so the legacy merge runs once and cannot bring back handles removed later. */
+export const legacyAllowlistMigratedItem = storage.defineItem<boolean>('local:legacy-allowlist-migrated', {
+  fallback: false,
+});
+
 /**
- * Moves the allowlist from sync to local storage and drops the old combined
- * blocklist item. Safe to run more than once: missing legacy keys are a no-op.
+ * Merges the legacy sync allowlist into local storage once per device and
+ * drops the old combined blocklist item. The sync key is kept: removing it
+ * would propagate to other devices still on the old version and wipe their
+ * allowlist.
  */
 export async function migrateLegacyStorage(): Promise<void> {
+  if (await legacyAllowlistMigratedItem.getValue()) return;
   const legacy = await storage.getItem<string[]>(LEGACY_ALLOWLIST_KEY);
   if (legacy && legacy.length > 0) {
     const merged = new Set(await allowlistItem.getValue());
@@ -19,5 +27,6 @@ export async function migrateLegacyStorage(): Promise<void> {
     }
     await allowlistItem.setValue([...merged]);
   }
-  await Promise.all([storage.removeItem(LEGACY_ALLOWLIST_KEY), storage.removeItem(LEGACY_BLOCKLIST_KEY)]);
+  await storage.removeItem(LEGACY_BLOCKLIST_KEY);
+  await legacyAllowlistMigratedItem.setValue(true);
 }
