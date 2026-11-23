@@ -50,7 +50,7 @@ function isStatusPage(): boolean {
 }
 
 export default defineContentScript({
-  matches: ['*://x.com/*', '*://*.x.com/*', '*://twitter.com/*', '*://*.twitter.com/*'],
+  matches: ['https://x.com/*', 'https://*.x.com/*', 'https://twitter.com/*', 'https://*.twitter.com/*'],
   runAt: 'document_start',
   async main(ctx) {
     // Capture phase on window runs before X's own shortcut handlers.
