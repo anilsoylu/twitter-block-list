@@ -36,12 +36,15 @@ export const test = base.extend<{
   popup: Page;
   /** HTTP statuses the routed list host answered with, in order. */
   listResponses: number[];
+  /** Handles the routed list host serves; must already be normalized (lowercase, unique). */
+  listHandles: string[];
 }>({
+  listHandles: [LISTED_HANDLES, { option: true }],
   // eslint-disable-next-line no-empty-pattern
   listResponses: async ({}, use) => {
     await use([]);
   },
-  context: async ({ listResponses }, use) => {
+  context: async ({ listResponses, listHandles }, use) => {
     const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
       headless: true,
@@ -65,7 +68,7 @@ export const test = base.extend<{
         status: 200,
         contentType: 'text/plain',
         headers: { etag: ETAG },
-        body: LISTED_HANDLES.join('\n'),
+        body: listHandles.join('\n'),
       });
     });
     await context.route('https://x.com/**', (route) =>
@@ -80,11 +83,11 @@ export const test = base.extend<{
     await use(new URL(worker.url()).host);
   },
   // Popup page with the routed list already synced into storage.
-  popup: async ({ context, extensionId }, use) => {
+  popup: async ({ context, extensionId, listHandles }, use) => {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     await popup.getByRole('button', { name: 'Update now' }).click();
-    await expect.poll(() => readStorage(popup, 'local', 'blocklist-handles')).toEqual(LISTED_HANDLES);
+    await expect.poll(() => readStorage(popup, 'local', 'blocklist-handles')).toEqual(listHandles);
     await expect.poll(() => readStorage(popup, 'local', 'blocklist-meta')).toMatchObject({ etag: ETAG, lastError: null });
     await use(popup);
   },
