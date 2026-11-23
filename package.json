@@ -2,7 +2,7 @@
   "name": "ai-reply-filter-for-x",
   "description": "Collapse or hide posts on X from accounts listed on blockedforaireply.com.",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "scripts": {

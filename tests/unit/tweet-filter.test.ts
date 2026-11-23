@@ -41,6 +41,16 @@ function buttonByText(root: ParentNode, text: string): HTMLButtonElement {
   return button;
 }
 
+/**
+ * Dispatches a click marked as trusted, standing in for a real user click.
+ * happy-dom's click() is untrusted, like a page script calling click().
+ */
+function userClick(el: HTMLElement): void {
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'isTrusted', { value: true });
+  el.dispatchEvent(event);
+}
+
 function cellOf(el: HTMLElement): HTMLElement {
   return el.closest<HTMLElement>('[data-testid="cellInnerDiv"]')!;
 }
@@ -140,7 +150,7 @@ describe('applyFilter in collapse mode', () => {
     const ctx = makeContext();
     applyFilter(article, ctx);
 
-    buttonByText(noticeOf(article), 'Show').click();
+    userClick(buttonByText(noticeOf(article), 'Show'));
 
     expect(article.getAttribute(REVEALED_ATTR)).toBe('alice');
     expect(article.getAttribute(FILTER_ATTR)).toBe('locked');
@@ -165,12 +175,25 @@ describe('applyFilter in collapse mode', () => {
     const ctx = makeContext();
     applyFilter(article, ctx);
 
-    buttonByText(noticeOf(article), 'Always show').click();
-    buttonByText(noticeOf(article), 'Show').click();
-    buttonByText(noticeOf(article), 'Always show').click();
+    userClick(buttonByText(noticeOf(article), 'Always show'));
+    userClick(buttonByText(noticeOf(article), 'Show'));
+    userClick(buttonByText(noticeOf(article), 'Always show'));
 
     expect(ctx.onAlwaysShow).toHaveBeenCalledTimes(2);
     expect(ctx.onAlwaysShow).toHaveBeenCalledWith('alice');
+  });
+
+  it('ignores untrusted clicks on Show and Always show', () => {
+    const article = loadFixture('normal-post');
+    const ctx = makeContext();
+    applyFilter(article, ctx);
+
+    buttonByText(noticeOf(article), 'Show').click();
+    buttonByText(noticeOf(article), 'Always show').click();
+
+    expect(article.hasAttribute(REVEALED_ATTR)).toBe(false);
+    expect(article.getAttribute(FILTER_ATTR)).toBe('collapsed');
+    expect(ctx.onAlwaysShow).not.toHaveBeenCalled();
   });
 
   it('does not let clicks on the Notice bubble to the cell', () => {
@@ -180,9 +203,9 @@ describe('applyFilter in collapse mode', () => {
     cellOf(article).addEventListener('click', cellClick);
 
     noticeOf(article).querySelector<HTMLElement>('.ai-reply-filter-text')!.click();
-    buttonByText(noticeOf(article), 'Always show').click();
-    buttonByText(noticeOf(article), 'Show').click();
-    buttonByText(noticeOf(article), 'Always show').click();
+    userClick(buttonByText(noticeOf(article), 'Always show'));
+    userClick(buttonByText(noticeOf(article), 'Show'));
+    userClick(buttonByText(noticeOf(article), 'Always show'));
 
     expect(cellClick).not.toHaveBeenCalled();
   });
@@ -204,7 +227,7 @@ describe('applyFilter in collapse mode', () => {
     applyFilter(article, ctx);
     const card = article.querySelector<HTMLElement>('div[role="link"]')!;
 
-    buttonByText(noticeOf(card), 'Show').click();
+    userClick(buttonByText(noticeOf(card), 'Show'));
     applyFilter(article, ctx);
 
     expect(card.getAttribute(REVEALED_ATTR)).toBe('quoted');
@@ -224,7 +247,7 @@ describe('applyFilter in collapse mode', () => {
   it('locks only the post itself, never its quote card', () => {
     const article = loadFixture('post-with-action-bar');
     applyFilter(article, makeContext({ blocklist: ['alice', 'quoted'] }));
-    buttonByText(noticeOf(article), 'Show').click();
+    userClick(buttonByText(noticeOf(article), 'Show'));
 
     expect(article.getAttribute(FILTER_ATTR)).toBe('locked');
     expect(article.querySelector(`[${FILTER_ATTR}]`)).toBeNull();
@@ -329,7 +352,7 @@ describe('applyFilter on a recycled article', () => {
     const article = loadFixture('normal-post');
     const ctx = makeContext({ blocklist: ['alice', 'bob'] });
     applyFilter(article, ctx);
-    buttonByText(noticeOf(article), 'Show').click();
+    userClick(buttonByText(noticeOf(article), 'Show'));
 
     switchAuthor(article, 'alice', 'bob');
     applyFilter(article, ctx);
@@ -356,7 +379,7 @@ describe('clearFilter', () => {
     const quote = loadFixture('quote-post');
     applyFilter(quote, makeContext({ blocklist: ['quoted'] }));
     const card = quote.querySelector('div[role="link"]')!;
-    buttonByText(noticeOf(card), 'Show').click();
+    userClick(buttonByText(noticeOf(card), 'Show'));
     expect(card.getAttribute(REVEALED_ATTR)).toBe('quoted');
 
     const normal = document.createElement('div');
@@ -405,7 +428,7 @@ describe('mutation loop guard', () => {
     const article = loadFixture('normal-post');
     const ctx = makeContext();
     applyFilter(article, ctx);
-    buttonByText(noticeOf(article), 'Show').click();
+    userClick(buttonByText(noticeOf(article), 'Show'));
     const observer = new MutationObserver(() => {});
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 
@@ -437,7 +460,7 @@ describe('shouldBlockShortcut', () => {
   function setUp(state: 'collapsed' | 'locked' | 'unlisted'): HTMLElement {
     const article = loadFixture('post-with-action-bar');
     applyFilter(article, makeContext({ blocklist: state === 'unlisted' ? [] : ['alice'] }));
-    if (state === 'locked') buttonByText(noticeOf(article), 'Show').click();
+    if (state === 'locked') userClick(buttonByText(noticeOf(article), 'Show'));
     return article.querySelector<HTMLElement>('[data-testid="like"]')!;
   }
 
@@ -586,7 +609,7 @@ describe('applyComposerFilter', () => {
     const { focal, composer } = load();
     const ctx = makeContext();
     applyFilter(focal, ctx);
-    buttonByText(noticeOf(focal), 'Show').click();
+    userClick(buttonByText(noticeOf(focal), 'Show'));
     applyComposerFilter(document, ctx);
 
     expect(focal.getAttribute(FILTER_ATTR)).toBe('locked');
