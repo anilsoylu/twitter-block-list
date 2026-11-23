@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { BLOCKLIST_URL, normalizeHandle, parseUsernames, syncBlocklist } from '@/utils/blocklist';
-import { blocklistItem } from '@/utils/storage';
+import { BLOCKLIST_URL, diffHandles, normalizeHandle, parseUsernames, syncBlocklist } from '@/utils/blocklist';
+import { blocklistHandlesItem, blocklistMetaItem, type BlocklistMeta } from '@/utils/storage';
 
 function textResponse(body: string, status = 200, etag?: string): Response {
   const headers = etag ? { etag } : undefined;
@@ -16,6 +16,17 @@ function fakeFetch(...responses: Array<Response | Error>) {
     else fn.mockResolvedValueOnce(response);
   }
   return fn;
+}
+
+/** Storage keys written to chrome.storage.local, in order. */
+function spyLocalWrites(): string[] {
+  const keys: string[] = [];
+  const original = fakeBrowser.storage.local.set.bind(fakeBrowser.storage.local);
+  vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(async (items) => {
+    keys.push(...Object.keys(items));
+    return original(items);
+  });
+  return keys;
 }
 
 function sentHeaders(fn: ReturnType<typeof fakeFetch>, call: number): Record<string, string> {
@@ -56,13 +67,41 @@ describe('parseUsernames', () => {
   });
 });
 
+describe('diffHandles', () => {
+  it('counts added and removed handles', () => {
+    expect(diffHandles(['alice', 'bob'], ['bob', 'carol', 'dave'])).toEqual({ added: 2, removed: 1 });
+  });
+
+  it('ignores order and duplicates', () => {
+    expect(diffHandles(['alice', 'bob', 'bob'], ['bob', 'alice'])).toEqual({ added: 0, removed: 0 });
+  });
+
+  it('handles empty lists', () => {
+    expect(diffHandles([], ['alice'])).toEqual({ added: 1, removed: 0 });
+    expect(diffHandles(['alice'], [])).toEqual({ added: 0, removed: 1 });
+  });
+});
+
 describe('syncBlocklist', () => {
+  const seededMeta: BlocklistMeta = {
+    etag: '"v1"',
+    lastSyncedAt: 1_000,
+    lastError: null,
+    lastChange: { added: 2, removed: 0, at: 1_000 },
+  };
+
+  async function seed(handles: string[], meta: Partial<BlocklistMeta> = {}): Promise<void> {
+    await blocklistHandlesItem.setValue(handles);
+    await blocklistMetaItem.setValue({ ...seededMeta, ...meta });
+  }
+
   beforeEach(() => {
     fakeBrowser.reset();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  it('stores lowercase handles, etag, lastSyncedAt and clears lastError on 200', async () => {
+  it('stores lowercase handles and meta with lastChange on the first 200', async () => {
     vi.useFakeTimers({ now: 1_000 });
     const fetchFn = fakeFetch(textResponse('Alice\nBob\n', 200, '"v1"'));
 
@@ -70,35 +109,33 @@ describe('syncBlocklist', () => {
 
     expect(fetchFn).toHaveBeenCalledWith(BLOCKLIST_URL, expect.objectContaining({ cache: 'no-cache' }));
     expect(sentHeaders(fetchFn, 0)).not.toHaveProperty('If-None-Match');
-    const expected = { handles: ['alice', 'bob'], etag: '"v1"', lastSyncedAt: 1_000, lastError: null };
-    expect(result).toEqual(expected);
-    expect(await blocklistItem.getValue()).toEqual(expected);
+    expect(result).toEqual({
+      etag: '"v1"',
+      lastSyncedAt: 1_000,
+      lastError: null,
+      lastChange: { added: 2, removed: 0, at: 1_000 },
+    });
+    expect(await blocklistMetaItem.getValue()).toEqual(result);
+    expect(await blocklistHandlesItem.getValue()).toEqual(['alice', 'bob']);
   });
 
-  it('sends If-None-Match on the next call and keeps handles on 304', async () => {
-    vi.useFakeTimers({ now: 1_000 });
-    const fetchFn = fakeFetch(textResponse('alice\n', 200, '"v1"'), textResponse('', 304));
-    await syncBlocklist(fetchFn);
+  it('sends If-None-Match and on 304 writes only the meta item', async () => {
+    vi.useFakeTimers({ now: 5_000 });
+    await seed(['alice', 'bob'], { lastError: 'HTTP 503' });
+    const writes = spyLocalWrites();
+    const fetchFn = fakeFetch(textResponse('', 304));
 
-    vi.setSystemTime(5_000);
     const result = await syncBlocklist(fetchFn);
 
-    expect(sentHeaders(fetchFn, 1)).toEqual({ 'If-None-Match': '"v1"' });
-    expect(result).toEqual({ handles: ['alice'], etag: '"v1"', lastSyncedAt: 5_000, lastError: null });
-    expect(await blocklistItem.getValue()).toEqual(result);
-  });
-
-  it('clears a previous lastError after a 304', async () => {
-    await blocklistItem.setValue({ handles: ['alice'], etag: '"v1"', lastSyncedAt: 1, lastError: 'HTTP 503' });
-
-    const result = await syncBlocklist(fakeFetch(textResponse('', 304)));
-
-    expect(result.lastError).toBeNull();
-    expect(result.handles).toEqual(['alice']);
+    expect(sentHeaders(fetchFn, 0)).toEqual({ 'If-None-Match': '"v1"' });
+    expect(result).toEqual({ ...seededMeta, lastSyncedAt: 5_000, lastError: null });
+    expect(await blocklistMetaItem.getValue()).toEqual(result);
+    expect(writes).toEqual(['blocklist-meta']);
+    expect(await blocklistHandlesItem.getValue()).toEqual(['alice', 'bob']);
   });
 
   it('does not send If-None-Match when no handles are stored', async () => {
-    await blocklistItem.setValue({ handles: [], etag: '"v1"', lastSyncedAt: 1, lastError: null });
+    await seed([]);
     const fetchFn = fakeFetch(textResponse('alice', 200, '"v2"'));
 
     await syncBlocklist(fetchFn);
@@ -106,11 +143,34 @@ describe('syncBlocklist', () => {
     expect(sentHeaders(fetchFn, 0)).not.toHaveProperty('If-None-Match');
   });
 
-  describe('keeps the previous list and records lastError', () => {
-    const previous = { handles: ['alice'], etag: '"v1"', lastSyncedAt: 1_000, lastError: null };
+  it('on a 200 with the same set in another order and case, writes meta only and keeps lastChange', async () => {
+    vi.useFakeTimers({ now: 9_000 });
+    await seed(['alice', 'bob']);
+    const writes = spyLocalWrites();
 
+    const result = await syncBlocklist(fakeFetch(textResponse('BOB\n@Alice\n', 200, '"v2"')));
+
+    expect(result).toEqual({ ...seededMeta, etag: '"v2"', lastSyncedAt: 9_000 });
+    expect(writes).toEqual(['blocklist-meta']);
+    expect(await blocklistHandlesItem.getValue()).toEqual(['alice', 'bob']);
+  });
+
+  it('on a 200 with changes, replaces the handles and records lastChange', async () => {
+    vi.useFakeTimers({ now: 9_000 });
+    await seed(['alice', 'bob']);
+    const writes = spyLocalWrites();
+
+    const result = await syncBlocklist(fakeFetch(textResponse('bob\ncarol\ndave\n', 200, '"v2"')));
+
+    expect(result.lastChange).toEqual({ added: 2, removed: 1, at: 9_000 });
+    expect(result.etag).toBe('"v2"');
+    expect(await blocklistHandlesItem.getValue()).toEqual(['bob', 'carol', 'dave']);
+    expect(writes).toEqual(['blocklist-handles', 'blocklist-meta']);
+  });
+
+  describe('keeps the previous handles and records lastError', () => {
     beforeEach(async () => {
-      await blocklistItem.setValue(previous);
+      await seed(['alice']);
     });
 
     it.each([
@@ -123,10 +183,14 @@ describe('syncBlocklist', () => {
       ['a 503', () => textResponse('Service Unavailable', 503), 'HTTP 503'],
       ['a network error', () => new TypeError('Failed to fetch'), 'Failed to fetch'],
     ])('on %s', async (_label, makeResponse, message) => {
+      const writes = spyLocalWrites();
+
       const result = await syncBlocklist(fakeFetch(makeResponse()));
 
-      expect(result).toEqual({ ...previous, lastError: message });
-      expect(await blocklistItem.getValue()).toEqual(result);
+      expect(result).toEqual({ ...seededMeta, lastError: message });
+      expect(await blocklistMetaItem.getValue()).toEqual(result);
+      expect(await blocklistHandlesItem.getValue()).toEqual(['alice']);
+      expect(writes).toEqual(['blocklist-meta']);
     });
   });
 });

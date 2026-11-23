@@ -7,10 +7,19 @@ const TIMELINE_HTML = readFileSync(new URL('../fixtures/x-timeline.html', import
 
 export const BLOCKLIST_URL = 'https://blockedforaireply.com/api/usernames.txt';
 export const LISTED_HANDLES = ['alice', 'quoted'];
+const ETAG = '"e2e-v1"';
 
 type StorageArea = 'local' | 'sync';
-interface ChromeStorageGlobal {
-  chrome: { storage: Record<StorageArea, { get(key: string): Promise<Record<string, unknown>> }> };
+export interface ChromeStorageGlobal {
+  chrome: {
+    storage: Record<
+      StorageArea,
+      {
+        get(key: string): Promise<Record<string, unknown>>;
+        onChanged: { addListener(cb: (changes: Record<string, unknown>) => void): void };
+      }
+    >;
+  };
 }
 
 /** Reads a raw chrome.storage value from an extension page. */
@@ -21,9 +30,21 @@ export function readStorage(page: Page, area: StorageArea, key: string): Promise
   );
 }
 
-export const test = base.extend<{ context: BrowserContext; extensionId: string; popup: Page }>({
+export const test = base.extend<{
+  context: BrowserContext;
+  extensionId: string;
+  popup: Page;
+  /** HTTP statuses the routed list host answered with, in order. */
+  listResponses: number[];
+  /** Handles the routed list host serves; must already be normalized (lowercase, unique). */
+  listHandles: string[];
+}>({
+  listHandles: [LISTED_HANDLES, { option: true }],
   // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
+  listResponses: async ({}, use) => {
+    await use([]);
+  },
+  context: async ({ listResponses, listHandles }, use) => {
     const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
       headless: true,
@@ -35,14 +56,21 @@ export const test = base.extend<{ context: BrowserContext; extensionId: string; 
         '--host-resolver-rules=MAP blockedforaireply.com ~NOTFOUND, MAP x.com ~NOTFOUND',
       ],
     });
-    await context.route(BLOCKLIST_URL, (route) =>
-      route.fulfill({
+    // Answers a conditional request for the current etag with 304, like the real host.
+    await context.route(BLOCKLIST_URL, async (route) => {
+      if ((await route.request().headerValue('if-none-match')) === ETAG) {
+        listResponses.push(304);
+        await route.fulfill({ status: 304, headers: { etag: ETAG } });
+        return;
+      }
+      listResponses.push(200);
+      await route.fulfill({
         status: 200,
         contentType: 'text/plain',
-        headers: { etag: '"e2e-v1"' },
-        body: LISTED_HANDLES.join('\n'),
-      }),
-    );
+        headers: { etag: ETAG },
+        body: listHandles.join('\n'),
+      });
+    });
     await context.route('https://x.com/**', (route) =>
       route.fulfill({ status: 200, contentType: 'text/html', body: TIMELINE_HTML }),
     );
@@ -55,13 +83,12 @@ export const test = base.extend<{ context: BrowserContext; extensionId: string; 
     await use(new URL(worker.url()).host);
   },
   // Popup page with the routed list already synced into storage.
-  popup: async ({ context, extensionId }, use) => {
+  popup: async ({ context, extensionId, listHandles }, use) => {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     await popup.getByRole('button', { name: 'Update now' }).click();
-    await expect
-      .poll(async () => ((await readStorage(popup, 'local', 'blocklist')) as { handles?: string[] } | undefined)?.handles)
-      .toEqual(LISTED_HANDLES);
+    await expect.poll(() => readStorage(popup, 'local', 'blocklist-handles')).toEqual(listHandles);
+    await expect.poll(() => readStorage(popup, 'local', 'blocklist-meta')).toMatchObject({ etag: ETAG, lastError: null });
     await use(popup);
   },
 });

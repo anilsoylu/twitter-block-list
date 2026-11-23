@@ -11,9 +11,11 @@ data, and never calls X's API.
 
 ## How it works
 
-The background worker downloads `usernames.txt` from blockedforaireply.com on install, on browser startup, and every 6
-hours. Requests send the previous ETag, so an unchanged list costs a `304` response. The content script reads each post's
-author handle from the page and matches it against the stored list locally; nothing is sent to X or any other service.
+The background worker downloads `usernames.txt` from blockedforaireply.com on install, on browser startup, and every
+hour. Requests send the previous ETag, so an unchanged list costs a `304` response and leaves the stored list untouched.
+When the list does change, both additions and removals apply to open tabs, and the popup shows how many accounts were
+added and removed in the last change. The content script reads each post's author handle from the page and matches it
+against the stored list locally; nothing is sent to X or any other service.
 
 ## Development
 

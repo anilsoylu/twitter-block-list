@@ -1,40 +1,129 @@
-.ai-reply-filter-hidden {
+/*
+ * State lives in the data-ai-reply-filter attribute, which X never rewrites
+ * (it does rewrite className). Collapsed targets are removed from layout and
+ * the Notice sits right before them as a sibling.
+ */
+[data-ai-reply-filter='collapsed'],
+[data-ai-reply-filter='hidden'] {
   display: none !important;
 }
 
-.ai-reply-filter-collapsed > :not(.ai-reply-filter-placeholder) {
-  display: none !important;
+/*
+ * Engagement lock: the post's own action bar, not one inside its quote card.
+ * Mirrors OWN_ACTION_BAR_SELECTOR in utils/selectors.ts.
+ */
+[data-ai-reply-filter='locked'] [role='group']:not(div[role='link'] [role='group']) {
+  pointer-events: none !important;
+  opacity: 0.35 !important;
 }
 
-.ai-reply-filter-placeholder {
+/*
+ * Colour: the row uses `color: inherit`. X sets text colour on its own inner
+ * text nodes, not on cells, so the inherited value comes from the page root,
+ * where X sets `color-scheme` for light, dim and dark; that yields dark text on
+ * light and light text on dim/dark. Every tint (background, borders, hover) is
+ * derived from currentColor so it follows the theme. The secondary line uses
+ * X's own secondary grey, which is readable on all three backgrounds even if
+ * the inherited colour were ever wrong.
+ */
+.ai-reply-filter-notice {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 100%;
   align-items: center;
-  gap: 4px 12px;
-  padding: 8px 16px;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
   color: inherit;
-  font-size: 13px;
-  line-height: 1.4;
+  font-family: TwitterChirp, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
   cursor: default;
 }
 
-.ai-reply-filter-placeholder > span {
-  opacity: 0.6;
+.ai-reply-filter-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.ai-reply-filter-placeholder > button {
-  padding: 0;
-  border: 0;
-  background: none;
+.ai-reply-filter-icon-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.ai-reply-filter-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+}
+
+.ai-reply-filter-title {
+  font-weight: 600;
+}
+
+.ai-reply-filter-detail {
+  color: rgb(113, 118, 123);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ai-reply-filter-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ai-reply-filter-button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+  background: transparent;
   color: inherit;
-  font: inherit;
-  opacity: 0.8;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.ai-reply-filter-placeholder > button:hover,
-.ai-reply-filter-placeholder > button:focus-visible {
-  opacity: 1;
+.ai-reply-filter-button:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.ai-reply-filter-button:focus-visible {
+  outline: 2px solid rgb(29, 155, 240);
+  outline-offset: 2px;
+}
+
+/* Engagement lock variant: a quieter, smaller row above a revealed post. */
+.ai-reply-filter-notice-lock {
+  min-height: 32px;
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+.ai-reply-filter-notice-lock .ai-reply-filter-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-reply-filter-notice-lock .ai-reply-filter-button {
+  height: 24px;
 }

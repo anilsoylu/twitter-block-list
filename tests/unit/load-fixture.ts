@@ -14,3 +14,11 @@ export function loadFixture(name: string): HTMLElement {
   if (!article) throw new Error(`Fixture ${name} has no post article`);
   return article;
 }
+
+/** Replaces the document body with a fixture and returns the first element matching `selector`. */
+export function loadFixtureElement(name: string, selector: string): HTMLElement {
+  document.body.innerHTML = readFixture(name);
+  const el = document.querySelector<HTMLElement>(selector);
+  if (!el) throw new Error(`Fixture ${name} has no ${selector}`);
+  return el;
+}
