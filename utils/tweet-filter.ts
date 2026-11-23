@@ -155,7 +155,11 @@ function buildButton(doc: Document, text: string, label: string, onClick: () => 
   button.className = 'ai-reply-filter-button';
   button.textContent = text;
   button.setAttribute('aria-label', label);
-  button.addEventListener('click', onClick);
+  // Only real user clicks: page scripts could otherwise call click() to
+  // reveal posts or allowlist accounts.
+  button.addEventListener('click', (event) => {
+    if (event.isTrusted) onClick();
+  });
   return button;
 }
 
