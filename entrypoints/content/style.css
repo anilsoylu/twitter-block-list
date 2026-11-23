@@ -1,0 +1,40 @@
+.ai-reply-filter-hidden {
+  display: none !important;
+}
+
+.ai-reply-filter-collapsed > :not(.ai-reply-filter-placeholder) {
+  display: none !important;
+}
+
+.ai-reply-filter-placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 16px;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: default;
+}
+
+.ai-reply-filter-placeholder > span {
+  opacity: 0.6;
+}
+
+.ai-reply-filter-placeholder > button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  opacity: 0.8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.ai-reply-filter-placeholder > button:hover,
+.ai-reply-filter-placeholder > button:focus-visible {
+  opacity: 1;
+}
