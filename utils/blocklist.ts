@@ -1,4 +1,4 @@
-import { blocklistItem, type BlocklistState } from './storage';
+import { blocklistHandlesItem, blocklistMetaItem, type BlocklistMeta } from './storage';
 
 export const BLOCKLIST_URL = 'https://blockedforaireply.com/api/usernames.txt';
 
@@ -22,38 +22,56 @@ export function parseUsernames(text: string): string[] {
   return [...handles];
 }
 
+export function diffHandles(
+  previous: readonly string[],
+  next: readonly string[],
+): { added: number; removed: number } {
+  const previousSet = new Set(previous);
+  const nextSet = new Set(next);
+  let added = 0;
+  let removed = 0;
+  for (const handle of nextSet) if (!previousSet.has(handle)) added++;
+  for (const handle of previousSet) if (!nextSet.has(handle)) removed++;
+  return { added, removed };
+}
+
 /**
  * Fetches the remote list and persists the result. Never throws: failures are
- * recorded in `lastError` while the previous handles are kept.
+ * recorded in `lastError` while the previous handles are kept. The handle list
+ * is only written when its contents change.
  */
-export async function syncBlocklist(fetchFn: typeof fetch = fetch): Promise<BlocklistState> {
-  const current = await blocklistItem.getValue();
-  let next: BlocklistState;
+export async function syncBlocklist(fetchFn: typeof fetch = fetch): Promise<BlocklistMeta> {
+  const [handles, meta] = await Promise.all([blocklistHandlesItem.getValue(), blocklistMetaItem.getValue()]);
+  let next: BlocklistMeta;
 
   try {
     const headers: Record<string, string> = {};
-    if (current.etag && current.handles.length > 0) headers['If-None-Match'] = current.etag;
+    if (meta.etag && handles.length > 0) headers['If-None-Match'] = meta.etag;
 
     const response = await fetchFn(BLOCKLIST_URL, { cache: 'no-cache', headers });
 
     if (response.status === 304) {
-      next = { ...current, lastSyncedAt: Date.now(), lastError: null };
+      next = { ...meta, lastSyncedAt: Date.now(), lastError: null };
     } else if (response.status === 200) {
-      const handles = parseUsernames(await response.text());
-      if (handles.length === 0) throw new Error('Empty or invalid list');
+      const fetched = parseUsernames(await response.text());
+      if (fetched.length === 0) throw new Error('Empty or invalid list');
+      const now = Date.now();
+      const { added, removed } = diffHandles(handles, fetched);
+      const changed = added + removed > 0;
+      if (changed) await blocklistHandlesItem.setValue(fetched);
       next = {
-        handles,
         etag: response.headers.get('etag'),
-        lastSyncedAt: Date.now(),
+        lastSyncedAt: now,
         lastError: null,
+        lastChange: changed ? { added, removed, at: now } : meta.lastChange,
       };
     } else {
       throw new Error(`HTTP ${response.status}`);
     }
   } catch (error) {
-    next = { ...current, lastError: error instanceof Error ? error.message : String(error) };
+    next = { ...meta, lastError: error instanceof Error ? error.message : String(error) };
   }
 
-  await blocklistItem.setValue(next);
+  await blocklistMetaItem.setValue(next);
   return next;
 }
