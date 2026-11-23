@@ -4,9 +4,47 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Reply Filter for X</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <main class="popup">
+      <h1 class="popup-title">AI Reply Filter for X</h1>
+
+      <section class="popup-section" aria-labelledby="settings-heading">
+        <h2 id="settings-heading" class="visually-hidden">Settings</h2>
+        <label class="toggle">
+          <input id="enabled" type="checkbox" />
+          <span>Enabled</span>
+        </label>
+        <fieldset id="mode" class="mode">
+          <legend>When a post is from a listed account</legend>
+          <label><input type="radio" name="mode" value="collapse" /> Collapse (show a placeholder)</label>
+          <label><input type="radio" name="mode" value="hide" /> Hide completely</label>
+        </fieldset>
+      </section>
+
+      <section class="popup-section" aria-labelledby="status-heading">
+        <h2 id="status-heading">List status</h2>
+        <p id="count"></p>
+        <p id="updated"></p>
+        <p id="error" class="warning" role="alert" hidden></p>
+        <button id="refresh" type="button">Update now</button>
+      </section>
+
+      <section class="popup-section" aria-labelledby="allowlist-heading">
+        <h2 id="allowlist-heading">Always shown accounts</h2>
+        <ul id="allowlist" class="allowlist"></ul>
+        <p id="allowlist-empty" class="muted">No accounts yet. Use "Always show" on a hidden post to add one.</p>
+      </section>
+
+      <footer class="popup-footer">
+        <p>
+          List source:
+          <a href="https://blockedforaireply.com/" target="_blank" rel="noopener">blockedforaireply.com</a>
+        </p>
+        <p class="muted">Not affiliated with X or levelsio.</p>
+      </footer>
+    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
