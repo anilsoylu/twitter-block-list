@@ -1,7 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { legacyAllowlistMigratedItem, migrateLegacyStorage } from '@/utils/migrate';
+import { syncBlocklist } from '@/utils/blocklist';
+import { legacyAllowlistMigratedItem, migrateLegacyStorage, migrateThenSync } from '@/utils/migrate';
 import { allowlistItem } from '@/utils/storage';
+
+vi.mock('@/utils/blocklist', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/blocklist')>()),
+  syncBlocklist: vi.fn(),
+}));
 
 describe('migrateLegacyStorage', () => {
   beforeEach(() => {
@@ -38,15 +44,38 @@ describe('migrateLegacyStorage', () => {
     expect(await allowlistItem.getValue()).toEqual(['alice']);
   });
 
-  it('leaves the local allowlist untouched without legacy data and still sets the marker', async () => {
+  it('leaves the local allowlist untouched without legacy data and does not set the marker', async () => {
     await allowlistItem.setValue(['carol']);
 
     await migrateLegacyStorage();
 
     expect(await allowlistItem.getValue()).toEqual(['carol']);
-    expect(await fakeBrowser.storage.local.get()).toEqual({
-      allowlist: ['carol'],
-      'legacy-allowlist-migrated': true,
-    });
+    expect(await fakeBrowser.storage.local.get()).toEqual({ allowlist: ['carol'] });
+  });
+
+  it('merges legacy data that arrives after a run that found none', async () => {
+    await allowlistItem.setValue(['carol']);
+    await migrateLegacyStorage();
+    await fakeBrowser.storage.sync.set({ allowlist: ['dave'] });
+
+    await migrateLegacyStorage();
+
+    expect(await allowlistItem.getValue()).toEqual(['carol', 'dave']);
+    expect(await legacyAllowlistMigratedItem.getValue()).toBe(true);
+  });
+});
+
+describe('migrateThenSync', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.mocked(syncBlocklist).mockReset();
+  });
+
+  it('still syncs when the migration throws', async () => {
+    vi.spyOn(legacyAllowlistMigratedItem, 'getValue').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(migrateThenSync()).rejects.toThrow('boom');
+
+    expect(syncBlocklist).toHaveBeenCalledOnce();
   });
 });

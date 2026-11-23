@@ -1,5 +1,5 @@
 import { syncBlocklist, type RefreshBlocklistMessage } from '@/utils/blocklist';
-import { migrateLegacyStorage } from '@/utils/migrate';
+import { migrateThenSync } from '@/utils/migrate';
 
 const ALARM_NAME = 'refresh-blocklist';
 const ALARM_PERIOD_MINUTES = 60;
@@ -10,18 +10,15 @@ function isRefreshMessage(message: unknown): message is RefreshBlocklistMessage 
 
 export default defineBackground(() => {
   // Listeners must be registered synchronously so a restarted worker receives the event that woke it.
-  browser.runtime.onInstalled.addListener(async (details) => {
-    // Fresh installs migrate too, so a new device picks up an allowlist synced by an older version.
-    // A failed migration must not skip the sync.
-    try {
-      if (details.reason === 'install' || details.reason === 'update') await migrateLegacyStorage();
-    } finally {
-      await syncBlocklist();
-    }
+  // Fresh installs migrate too, so a new device picks up an allowlist synced by an older version.
+  // Startup retries in case that sync data had not downloaded yet when onInstalled fired.
+  browser.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'install' || details.reason === 'update') void migrateThenSync();
+    else void syncBlocklist();
   });
 
   browser.runtime.onStartup.addListener(() => {
-    void syncBlocklist();
+    void migrateThenSync();
   });
 
   browser.alarms.onAlarm.addListener((alarm) => {
